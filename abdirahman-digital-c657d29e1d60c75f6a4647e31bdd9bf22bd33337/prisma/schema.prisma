@@ -1,0 +1,463 @@
+// Abdirahman Digital — Database Schema
+// PostgreSQL + Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
+
+enum Role {
+  OWNER
+  ADMIN
+}
+
+enum ContentStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+// ---------------------------------------------------------------------------
+// AUTH / USER
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  role          Role      @default(OWNER)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+  loginAttempts LoginAttempt[]
+  auditLogs     AuditLog[]
+
+  statements    Statement[]
+  announcements Announcement[]
+  articles      Article[]
+  notes         Note[]
+  thoughts      Thought[]
+  portfolios    PortfolioProject[]
+
+  @@index([email])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Tracks failed/successful login attempts per IP+email for rate limiting / brute force protection
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ipAddress String
+  success   Boolean  @default(false)
+  userAgent String?
+  createdAt DateTime @default(now())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email, createdAt])
+  @@index([ipAddress, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action     String   // e.g. "STATEMENT_PUBLISHED", "ARTICLE_DELETED"
+  entityType String   // e.g. "Statement"
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
+// SITE-WIDE EDITABLE CONTENT (Home hero, About page, Contact info, etc.)
+// ---------------------------------------------------------------------------
+
+model SiteSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. "home.hero", "about.profile", "contact.info"
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// TAXONOMY
+// ---------------------------------------------------------------------------
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  // which content area this category belongs to, e.g. "note", "article", "portfolio", "general"
+  scope       String   @default("general")
+  createdAt   DateTime @default(now())
+
+  statements    Statement[]
+  announcements Announcement[]
+  articles      Article[]
+  notes         Note[]
+  thoughts      Thought[]
+  portfolios    PortfolioProject[]
+
+  @@unique([slug, scope])
+  @@index([scope])
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  statements    StatementTag[]
+  announcements AnnouncementTag[]
+  articles      ArticleTag[]
+  notes         NoteTag[]
+  thoughts      ThoughtTag[]
+  portfolios    PortfolioTag[]
+}
+
+// ---------------------------------------------------------------------------
+// MEDIA LIBRARY
+// ---------------------------------------------------------------------------
+
+model Media {
+  id        String   @id @default(cuid())
+  url       String
+  key       String   @unique // storage object key (S3/Cloudinary/etc.)
+  altText   String?
+  width     Int?
+  height    Int?
+  size      Int? // bytes
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// STATEMENTS
+// ---------------------------------------------------------------------------
+
+model Statement {
+  id              String        @id @default(cuid())
+  title           String
+  subtitle        String?
+  slug            String        @unique
+  content         String        // rich text (HTML/markdown)
+  featuredImage   String?
+  status          ContentStatus @default(DRAFT)
+  featured        Boolean       @default(false)
+  readingTimeMins Int           @default(1)
+  publishedAt     DateTime?
+  scheduledAt     DateTime?
+  seoTitle        String?
+  seoDescription  String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  authorId   String
+  author     User      @relation(fields: [authorId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags       StatementTag[]
+
+  @@index([status, publishedAt])
+  @@index([slug])
+  @@index([featured])
+}
+
+model StatementTag {
+  statementId String
+  tagId       String
+  statement   Statement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([statementId, tagId])
+}
+
+// ---------------------------------------------------------------------------
+// ANNOUNCEMENTS (Bayaanaan)
+// ---------------------------------------------------------------------------
+
+model Announcement {
+  id          String        @id @default(cuid())
+  title       String
+  slug        String        @unique
+  content     String
+  image       String?
+  status      ContentStatus @default(DRAFT)
+  featured    Boolean       @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  authorId   String
+  author     User      @relation(fields: [authorId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags       AnnouncementTag[]
+
+  @@index([status, publishedAt])
+  @@index([slug])
+}
+
+model AnnouncementTag {
+  announcementId String
+  tagId          String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  tag            Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, tagId])
+}
+
+// ---------------------------------------------------------------------------
+// ARTICLES / BLOG
+// ---------------------------------------------------------------------------
+
+model Article {
+  id              String        @id @default(cuid())
+  title           String
+  slug            String        @unique
+  excerpt         String?
+  content         String
+  coverImage      String?
+  status          ContentStatus @default(DRAFT)
+  featured        Boolean       @default(false)
+  readingTimeMins Int           @default(1)
+  publishedAt     DateTime?
+  scheduledAt     DateTime?
+  seoTitle        String?
+  seoDescription  String?
+  ogImage         String?
+  views           Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  authorId   String
+  author     User      @relation(fields: [authorId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags       ArticleTag[]
+
+  @@index([status, publishedAt])
+  @@index([slug])
+  @@index([featured])
+}
+
+model ArticleTag {
+  articleId String
+  tagId     String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+}
+
+// ---------------------------------------------------------------------------
+// NOTES
+// ---------------------------------------------------------------------------
+
+model Note {
+  id        String        @id @default(cuid())
+  title     String
+  slug      String        @unique
+  content   String
+  status    ContentStatus @default(DRAFT)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  authorId   String
+  author     User      @relation(fields: [authorId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags       NoteTag[]
+
+  @@index([status, createdAt])
+  @@index([slug])
+}
+
+model NoteTag {
+  noteId String
+  tagId  String
+  note   Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+// ---------------------------------------------------------------------------
+// THOUGHTS (short-form)
+// ---------------------------------------------------------------------------
+
+model Thought {
+  id        String        @id @default(cuid())
+  title     String?
+  slug      String        @unique
+  text      String
+  image     String?
+  status    ContentStatus @default(DRAFT)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  authorId   String
+  author     User      @relation(fields: [authorId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags       ThoughtTag[]
+
+  @@index([status, createdAt])
+  @@index([slug])
+}
+
+model ThoughtTag {
+  thoughtId String
+  tagId     String
+  thought   Thought @relation(fields: [thoughtId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([thoughtId, tagId])
+}
+
+// ---------------------------------------------------------------------------
+// PORTFOLIO
+// ---------------------------------------------------------------------------
+
+model PortfolioProject {
+  id             String        @id @default(cuid())
+  title          String
+  slug           String        @unique
+  description    String
+  image          String?
+  screenshots    String[]      @default([])
+  technologies   String[]      @default([])
+  projectUrl     String?
+  githubUrl      String?
+  completionDate DateTime?
+  featured       Boolean       @default(false)
+  status         ContentStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  authorId   String
+  author     User      @relation(fields: [authorId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags       PortfolioTag[]
+
+  @@index([status, featured])
+  @@index([slug])
+}
+
+model PortfolioTag {
+  portfolioId String
+  tagId       String
+  portfolio   PortfolioProject @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  tag         Tag              @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([portfolioId, tagId])
+}
+
+// ---------------------------------------------------------------------------
+// SERVICES
+// ---------------------------------------------------------------------------
+
+model Service {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  description  String
+  icon         String?
+  features     String[] @default([])
+  price        String?
+  availability String   @default("Available")
+  featured     Boolean  @default(false)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([featured, order])
+}
+
+// ---------------------------------------------------------------------------
+// SKILLS
+// ---------------------------------------------------------------------------
+
+model Skill {
+  id          String     @id @default(cuid())
+  name        String
+  category    String
+  level       SkillLevel @default(INTERMEDIATE)
+  description String?
+  icon        String?
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([category, order])
+}
+
+// ---------------------------------------------------------------------------
+// CONTACT
+// ---------------------------------------------------------------------------
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  ipAddress String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([isRead])
+}
+
+// ---------------------------------------------------------------------------
+// ANALYTICS (lightweight, privacy-conscious)
+// ---------------------------------------------------------------------------
+
+model PageView {
+  id        String   @id @default(cuid())
+  path      String
+  entityType String? // e.g. "Article"
+  entityId   String?
+  createdAt DateTime @default(now())
+
+  @@index([path, createdAt])
+  @@index([entityType, entityId])
+}

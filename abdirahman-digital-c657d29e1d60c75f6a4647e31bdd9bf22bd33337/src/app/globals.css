@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode — warm ivory background, deep indigo/emerald brand accents */
+    --background: 40 33% 98%;
+    --foreground: 222 24% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 24% 12%;
+
+    --primary: 243 62% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 160 40% 94%;
+    --secondary-foreground: 222 24% 12%;
+
+    --muted: 220 20% 95%;
+    --muted-foreground: 222 12% 42%;
+
+    --accent: 160 64% 36%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 90%;
+    --input: 220 20% 90%;
+    --ring: 243 62% 45%;
+
+    --brand-from: 243 62% 45%;
+    --brand-to: 160 64% 36%;
+
+    --radius: 1rem;
+  }
+
+  .dark {
+    /* Dark mode — near-black slate with the same indigo/emerald brand accents */
+    --background: 222 30% 7%;
+    --foreground: 220 20% 96%;
+
+    --card: 222 26% 10%;
+    --card-foreground: 220 20% 96%;
+
+    --primary: 243 75% 68%;
+    --primary-foreground: 222 30% 7%;
+
+    --secondary: 222 20% 15%;
+    --secondary-foreground: 220 20% 96%;
+
+    --muted: 222 20% 14%;
+    --muted-foreground: 220 10% 65%;
+
+    --accent: 160 60% 50%;
+    --accent-foreground: 222 30% 7%;
+
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 222 18% 18%;
+    --input: 222 18% 18%;
+    --ring: 243 75% 68%;
+
+    --brand-from: 243 75% 68%;
+    --brand-to: 160 60% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-card/60 backdrop-blur-xl border border-border/60;
+  }
+  .text-gradient-brand {
+    @apply bg-gradient-brand bg-clip-text text-transparent;
+  }
+  .card-hover {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
+  }
+}
+
+/* Respect reduced-motion preferences site-wide */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skeleton loader shimmer */
+.skeleton {
+  @apply relative overflow-hidden bg-muted rounded-md;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, hsl(var(--foreground) / 0.06), transparent);
+  animation: shimmer 1.6s infinite;
+}
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
